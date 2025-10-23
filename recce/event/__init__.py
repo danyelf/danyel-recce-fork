@@ -425,37 +425,31 @@ def log_viewed_query():
 
 def log_ran_check(check_id: str = None, check_type: str = None, check_position: int = None):
     """Log when user executes a check"""
-    prop = {}
-    if check_id is not None:
-        prop["check_id"] = check_id
-    if check_type is not None:
-        prop["check_type"] = check_type
-    if check_position is not None:
-        prop["check_position"] = check_position
+    prop = {
+        "check_id": check_id,
+        "check_type": check_type,
+        "check_position": check_position,
+    }
     log_event(prop, "[User] ran_check")
 
 
 def log_approved_check(check_id: str = None, check_type: str = None, check_position: int = None):
     """Log when user approves a check result"""
-    prop = {}
-    if check_id is not None:
-        prop["check_id"] = check_id
-    if check_type is not None:
-        prop["check_type"] = check_type
-    if check_position is not None:
-        prop["check_position"] = check_position
+    prop = {
+        "check_id": check_id,
+        "check_type": check_type,
+        "check_position": check_position,
+    }
     log_event(prop, "[User] approved_check")
 
 
 def log_created_check(check_id: str = None, check_type: str = None, check_position: int = None):
     """Log when user creates a check"""
-    prop = {}
-    if check_id is not None:
-        prop["check_id"] = check_id
-    if check_type is not None:
-        prop["check_type"] = check_type
-    if check_position is not None:
-        prop["check_position"] = check_position
+    prop = {
+        "check_id": check_id,
+        "check_type": check_type,
+        "check_position": check_position,
+    }
     log_event(prop, "[User] created_check")
 
 
@@ -466,49 +460,43 @@ def log_run_completed(run_id: str, run_type: str, status: str, duration_seconds:
         "run_type": run_type,
         "status": status,  # 'success', 'error', 'cancelled'
         "duration_seconds": duration_seconds,
+        "check_id": check_id,
+        "check_position": check_position,
     }
 
-    # Add check lifecycle information if available
-    if check_id is not None:
-        prop["check_id"] = check_id
-    if check_position is not None:
-        prop["check_position"] = check_position
-
-    # Add error information
+    # Categorize error type if there is one
+    error_type = None
+    error_message = None
     if error:
-        # Categorize error type
         error_lower = error.lower()
         if "connection" in error_lower or "connect" in error_lower:
-            prop["error_type"] = "connection"
+            error_type = "connection"
         elif "timeout" in error_lower:
-            prop["error_type"] = "timeout"
+            error_type = "timeout"
         elif "query" in error_lower or "sql" in error_lower:
-            prop["error_type"] = "query_error"
+            error_type = "query_error"
         elif "validation" in error_lower:
-            prop["error_type"] = "validation_error"
+            error_type = "validation_error"
         else:
-            prop["error_type"] = "other"
+            error_type = "other"
+        error_message = str(error)[:200]
 
-        # Truncate error message (no sensitive data)
-        prop["error_message"] = str(error)[:200]
-    else:
-        prop["error_type"] = None
-        prop["error_message"] = None
+    prop["error_type"] = error_type
+    prop["error_message"] = error_message
 
-    # Add result size/differences if available
+    # Extract result metrics
+    result_size = None
+    has_differences = None
     if result and isinstance(result, dict):
         if "data" in result and isinstance(result["data"], list):
-            prop["result_size"] = len(result["data"])
-
-        # Check for differences in diff operations
+            result_size = len(result["data"])
         if "diff" in result:
-            prop["has_differences"] = bool(result["diff"])
+            has_differences = bool(result["diff"])
         elif "data" in result and isinstance(result["data"], dict):
-            # For some diff types, data itself might indicate differences
-            prop["has_differences"] = len(result["data"]) > 0
-    else:
-        prop["result_size"] = None
-        prop["has_differences"] = None
+            has_differences = len(result["data"]) > 0
+
+    prop["result_size"] = result_size
+    prop["has_differences"] = has_differences
 
     log_event(prop, "[User] run_completed")
     _collector.schedule_flush()
