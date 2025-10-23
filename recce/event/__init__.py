@@ -311,6 +311,82 @@ def get_system_timezone():
     return datetime.now(timezone.utc).astimezone().tzinfo
 
 
+def _calculate_pr_age(pr):
+    """Calculate PR age in hours, or None if unavailable"""
+    if not hasattr(pr, "created_at") or not pr.created_at:
+        return None
+
+    try:
+        from dateutil import parser
+        pr_created = parser.parse(pr.created_at)
+        now = datetime.now(timezone.utc)
+        return (now - pr_created).total_seconds() / 3600
+    except (ValueError, TypeError) as e:
+        logger.debug(f"Could not parse PR created_at date: {e}")
+        return None
+
+
+def _add_pr_info(prop, context):
+    """Add PR information to properties"""
+    state = context.export_state()
+    if not state or not state.pull_request:
+        prop["has_pr"] = False
+        return
+
+    prop["has_pr"] = True
+    pr = state.pull_request
+    pr_info = {}
+
+    if pr.id:
+        pr_info["number"] = sha256(str(pr.id).encode()).hexdigest()
+    pr_info["state"] = getattr(pr, "state", None)
+    pr_info["age_hours"] = _calculate_pr_age(pr)
+
+    prop["pr_info"] = pr_info
+
+
+def _get_catalog_age(catalog):
+    """Get catalog age in hours, or None if unavailable"""
+    if not catalog or not catalog.metadata or not catalog.metadata.generated_at:
+        return None
+
+    gen_at = catalog.metadata.generated_at
+    now = datetime.now(timezone.utc)
+    return (now - gen_at).total_seconds() / 3600
+
+
+def _set_non_dbt_defaults(prop):
+    """Set default values for non-dbt adapters"""
+    prop["warehouse_type"] = None
+    prop["has_database"] = False
+    prop["has_base_env"] = False
+    prop["has_current_env"] = False
+    prop["catalog_age_hours_base"] = None
+    prop["catalog_age_hours_current"] = None
+
+
+def _add_dbt_info(prop, context):
+    """Add dbt-specific information to properties"""
+    try:
+        from recce.adapter.dbt_adapter import DbtAdapter
+        dbt_adapter: DbtAdapter = context.adapter
+
+        # Warehouse type
+        prop["warehouse_type"] = dbt_adapter.adapter.type()
+        prop["has_database"] = True
+
+        # Base and current environment info
+        prop["has_base_env"] = bool(dbt_adapter.base_manifest)
+        prop["catalog_age_hours_base"] = _get_catalog_age(dbt_adapter.base_catalog)
+
+        prop["has_current_env"] = bool(dbt_adapter.curr_manifest)
+        prop["catalog_age_hours_current"] = _get_catalog_age(dbt_adapter.curr_catalog)
+
+    except AttributeError as e:
+        logger.debug(f"Could not get dbt adapter info: {e}")
+        _set_non_dbt_defaults(prop)
+
+
 def log_environment_snapshot():
     """Log environment configuration at server startup"""
     from recce.core import default_context
@@ -327,107 +403,17 @@ def log_environment_snapshot():
     prop["has_cloud"] = context.state_loader.cloud_mode if context.state_loader else False
     prop["cloud_mode"] = "cloud" if prop["has_cloud"] else "local"
 
-    # PR information - collapsed into pr_info object
-    state = context.export_state() if context else None
-    pr_info = {}
-    if state and state.pull_request:
-        prop["has_pr"] = True
-        pr = state.pull_request
-        # Hash PR number for privacy
-        if pr.id:
-            pr_info["number"] = sha256(str(pr.id).encode()).hexdigest()
-        pr_info["state"] = getattr(pr, "state", None)
-
-        # Calculate PR age if created_at available
-        if hasattr(pr, "created_at") and pr.created_at:
-            try:
-                from dateutil import parser
-
-                pr_created = parser.parse(pr.created_at)
-                now = datetime.now(timezone.utc)
-                pr_info["age_hours"] = (now - pr_created).total_seconds() / 3600
-            except (ValueError, TypeError) as e:
-                logger.debug(f"Could not parse PR created_at date: {e}")
-                pr_info["age_hours"] = None
-        else:
-            pr_info["age_hours"] = None
-    else:
-        prop["has_pr"] = False
-        pr_info = None
-
-    if pr_info:
-        prop["pr_info"] = pr_info
+    # PR information
+    _add_pr_info(prop, context)
 
     # Adapter information
     prop["adapter_type"] = context.adapter_type
 
-    # Database/warehouse type
+    # dbt-specific information
     if context.adapter_type == "dbt":
-        try:
-            from recce.adapter.dbt_adapter import DbtAdapter
-
-            dbt_adapter: DbtAdapter = context.adapter
-            prop["warehouse_type"] = dbt_adapter.adapter.type()
-            prop["has_database"] = True  # If adapter initialized, assume DB configured
-        except AttributeError as e:
-            logger.debug(f"Could not determine warehouse type: {e}")
-            prop["warehouse_type"] = None
-            prop["has_database"] = False
+        _add_dbt_info(prop, context)
     else:
-        prop["warehouse_type"] = None
-        prop["has_database"] = False
-
-    # Catalog ages (collapsed from manifest and catalog - they're created together in dbt)
-    if context.adapter_type == "dbt":
-        try:
-            from recce.adapter.dbt_adapter import DbtAdapter
-
-            dbt_adapter: DbtAdapter = context.adapter
-
-            # Base environment
-            if dbt_adapter.base_manifest:
-                prop["has_base_env"] = True
-                if (
-                    dbt_adapter.base_catalog
-                    and dbt_adapter.base_catalog.metadata
-                    and dbt_adapter.base_catalog.metadata.generated_at
-                ):
-                    gen_at = dbt_adapter.base_catalog.metadata.generated_at
-                    now = datetime.now(timezone.utc)
-                    prop["catalog_age_hours_base"] = (now - gen_at).total_seconds() / 3600
-                else:
-                    prop["catalog_age_hours_base"] = None
-            else:
-                prop["has_base_env"] = False
-                prop["catalog_age_hours_base"] = None
-
-            # Current environment
-            if dbt_adapter.curr_manifest:
-                prop["has_current_env"] = True
-                if (
-                    dbt_adapter.curr_catalog
-                    and dbt_adapter.curr_catalog.metadata
-                    and dbt_adapter.curr_catalog.metadata.generated_at
-                ):
-                    gen_at = dbt_adapter.curr_catalog.metadata.generated_at
-                    now = datetime.now(timezone.utc)
-                    prop["catalog_age_hours_current"] = (now - gen_at).total_seconds() / 3600
-                else:
-                    prop["catalog_age_hours_current"] = None
-            else:
-                prop["has_current_env"] = False
-                prop["catalog_age_hours_current"] = None
-        except AttributeError as e:
-            logger.debug(f"Could not get catalog metadata: {e}")
-            prop["has_base_env"] = False
-            prop["has_current_env"] = False
-            prop["catalog_age_hours_base"] = None
-            prop["catalog_age_hours_current"] = None
-    else:
-        prop["has_base_env"] = False
-        prop["has_current_env"] = False
-        prop["catalog_age_hours_base"] = None
-        prop["catalog_age_hours_current"] = None
+        _set_non_dbt_defaults(prop)
 
     log_event(prop, "[User] environment_snapshot")
     _collector.schedule_flush()
