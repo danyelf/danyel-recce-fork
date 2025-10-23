@@ -311,6 +311,11 @@ def get_system_timezone():
     return datetime.now(timezone.utc).astimezone().tzinfo
 
 
+def _hash_id(value):
+    """Hash an ID for privacy. Handles strings, UUIDs, and other types."""
+    return sha256(str(value).encode()).hexdigest()
+
+
 def _calculate_pr_age(pr):
     """Calculate PR age in hours, or None if unavailable"""
     if not hasattr(pr, "created_at") or not pr.created_at:
@@ -335,7 +340,7 @@ def _add_pr_info(prop, context):
     pr = state.pull_request
 
     if pr.id:
-        prop["pr_number_hash"] = sha256(str(pr.id).encode()).hexdigest()
+        prop["pr_number_hash"] = _hash_id(pr.id)
     prop["pr_state"] = getattr(pr, "state", None)
     prop["pr_age_hours"] = _calculate_pr_age(pr)
 
@@ -456,7 +461,7 @@ def log_created_check(check_id: str = None, check_type: str = None, check_positi
 def log_run_completed(run_id: str, run_type: str, status: str, duration_seconds: float, error: str = None, result=None, check_id: str = None, check_position: int = None):
     """Log run completion with outcome"""
     prop = {
-        "run_id": sha256(str(run_id).encode()).hexdigest(),
+        "run_id": _hash_id(run_id),
         "run_type": run_type,
         "status": status,  # 'success', 'error', 'cancelled'
         "duration_seconds": duration_seconds,
