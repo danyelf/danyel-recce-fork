@@ -4,6 +4,7 @@ import time
 from typing import List, Optional
 
 from recce.core import default_context
+from recce.event import _get_check_position
 from recce.exceptions import RecceException
 from recce.models import Run, RunDAO, RunType
 from recce.models.types import RunStatus
@@ -150,16 +151,6 @@ def submit_run(type, params, check_id=None):
                 status = "cancelled"
         run.progress = None
 
-        # Compute check position for lifecycle tracking
-        check_position = None
-        if run.check_id:
-            from recce.models import CheckDAO
-            all_checks = CheckDAO().list()
-            check_position = next(
-                (i + 1 for i, c in enumerate(all_checks) if str(c.check_id) == str(run.check_id)),
-                None
-            )
-
         # Log run completion
         from recce.event import log_run_completed
 
@@ -171,7 +162,7 @@ def submit_run(type, params, check_id=None):
             error=error if error else None,
             result=result,
             check_id=str(run.check_id) if run.check_id else None,
-            check_position=check_position,
+            check_position=_get_check_position(run.check_id) if run.check_id else None,
         )
 
         # Clean up tracking
