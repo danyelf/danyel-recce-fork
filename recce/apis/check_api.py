@@ -11,7 +11,7 @@ from recce.apis.check_func import (
     export_persistent_state,
 )
 from recce.apis.run_func import submit_run
-from recce.event import log_api_event
+from recce.event import _hash_id, log_api_event
 from recce.exceptions import RecceException
 from recce.models import Check, CheckDAO, Run, RunDAO, RunType
 
@@ -75,8 +75,6 @@ async def create_check(check_in: CreateCheckIn, background_tasks: BackgroundTask
                 check_view_options=check_in.view_options,
             )
         # Enrich check creation tracking
-        from hashlib import sha256
-
         from recce.event import log_created_check
 
         all_checks = CheckDAO().list()
@@ -95,7 +93,7 @@ async def create_check(check_in: CreateCheckIn, background_tasks: BackgroundTask
         log_api_event(
             "create_check",
             dict(
-                check_id=sha256(str(check.check_id).encode()).hexdigest(),
+                check_id=_hash_id(check.check_id),
                 check_type=str(check.type),
                 source=source,
                 has_run=check_in.run_id is not None,
@@ -202,8 +200,6 @@ async def update_check_handler(check_id: UUID, patch: PatchCheckIn, background_t
 
         # Track check approval/unapproval
         if old_is_checked != patch.is_checked:
-            from hashlib import sha256
-
             from recce.event import log_approved_check
 
             # Check if this check has a passing run
@@ -222,7 +218,7 @@ async def update_check_handler(check_id: UUID, patch: PatchCheckIn, background_t
             log_api_event(
                 "check_approved",
                 dict(
-                    check_id=sha256(str(check.check_id).encode()).hexdigest(),
+                    check_id=_hash_id(check.check_id),
                     check_type=str(check.type),
                     approved=patch.is_checked,
                     has_passing_run=has_passing_run,
