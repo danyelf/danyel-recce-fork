@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 import re
 import sys
@@ -9,6 +10,8 @@ from hashlib import sha256
 from typing import Dict
 
 import sentry_sdk
+
+logger = logging.getLogger(__name__)
 
 from recce import get_runner, get_version, is_ci_env, is_recce_cloud_instance
 from recce import yaml as pyml
@@ -314,8 +317,8 @@ def log_environment_snapshot():
 
     try:
         context = default_context()
-    except Exception:
-        # Context not ready yet
+    except Exception as e:
+        logger.debug(f"Context not ready for environment snapshot: {e}")
         return
 
     prop = {}
@@ -343,7 +346,8 @@ def log_environment_snapshot():
                 pr_created = parser.parse(pr.created_at)
                 now = datetime.now(timezone.utc)
                 pr_info["age_hours"] = (now - pr_created).total_seconds() / 3600
-            except Exception:
+            except (ValueError, TypeError) as e:
+                logger.debug(f"Could not parse PR created_at date: {e}")
                 pr_info["age_hours"] = None
         else:
             pr_info["age_hours"] = None
@@ -365,7 +369,8 @@ def log_environment_snapshot():
             dbt_adapter: DbtAdapter = context.adapter
             prop["warehouse_type"] = dbt_adapter.adapter.type()
             prop["has_database"] = True  # If adapter initialized, assume DB configured
-        except Exception:
+        except AttributeError as e:
+            logger.debug(f"Could not determine warehouse type: {e}")
             prop["warehouse_type"] = None
             prop["has_database"] = False
     else:
@@ -412,7 +417,8 @@ def log_environment_snapshot():
             else:
                 prop["has_current_env"] = False
                 prop["catalog_age_hours_current"] = None
-        except Exception:
+        except AttributeError as e:
+            logger.debug(f"Could not get catalog metadata: {e}")
             prop["has_base_env"] = False
             prop["has_current_env"] = False
             prop["catalog_age_hours_base"] = None
