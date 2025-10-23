@@ -464,25 +464,8 @@ def log_run_completed(run_id: str, run_type: str, status: str, duration_seconds:
         "check_position": check_position,
     }
 
-    # Categorize error type if there is one
-    error_type = None
-    error_message = None
-    if error:
-        error_lower = error.lower()
-        if "connection" in error_lower or "connect" in error_lower:
-            error_type = "connection"
-        elif "timeout" in error_lower:
-            error_type = "timeout"
-        elif "query" in error_lower or "sql" in error_lower:
-            error_type = "query_error"
-        elif "validation" in error_lower:
-            error_type = "validation_error"
-        else:
-            error_type = "other"
-        error_message = str(error)[:200]
-
-    prop["error_type"] = error_type
-    prop["error_message"] = error_message
+    # Capture error message if there is one
+    prop["error"] = str(error)[:200] if error else None
 
     # Extract result metrics
     result_size = None
