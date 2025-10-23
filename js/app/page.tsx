@@ -397,6 +397,11 @@ function NavBar() {
   const [valueLocation, setValueLocation] = useState("/lineage");
   const { data: flag, isLoading: isFlagLoading } = useRecceServerFlag();
 
+  // Track tab timing for analytics
+  const [tabStartTime, setTabStartTime] = useState<number>(Date.now());
+  const [previousTab, setPreviousTab] = useState<string | null>(null);
+  const isUserTabClickRef = React.useRef(false);
+
   const checklistBadge = (
     <TabBadge<Check[]>
       queryKey={cacheKeys.checks()}
@@ -419,8 +424,14 @@ function NavBar() {
   ];
 
   useEffect(() => {
-    setValueLocation(`/${location.split("/")[1]}`);
-    // Only run on page load
+    const newTab = `/${location.split("/")[1]}`;
+    // Only update if it's not a user click on a tab (avoid interrupting Chakra's state)
+    if (!isUserTabClickRef.current) {
+      setValueLocation(newTab);
+    } else {
+      // Reset the flag after handling
+      isUserTabClickRef.current = false;
+    }
   }, [location]);
 
   return (
