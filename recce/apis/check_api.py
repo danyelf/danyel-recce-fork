@@ -11,7 +11,7 @@ from recce.apis.check_func import (
     export_persistent_state,
 )
 from recce.apis.run_func import submit_run
-from recce.event import _hash_id, log_api_event
+from recce.event import _get_check_position, _hash_id, log_api_event
 from recce.exceptions import RecceException
 from recce.models import Check, CheckDAO, Run, RunDAO, RunType
 
@@ -104,11 +104,10 @@ async def create_check(check_in: CreateCheckIn, background_tasks: BackgroundTask
         )
 
         # Log created_check milestone with lifecycle tracking
-        check_position = len(all_checks)  # Position in the list (1-based)
         log_created_check(
             check_id=str(check.check_id),
             check_type=str(check.type),
-            check_position=check_position
+            check_position=_get_check_position(check.check_id)
         )
     except NameError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -229,14 +228,10 @@ async def update_check_handler(check_id: UUID, patch: PatchCheckIn, background_t
 
             # Log approved_check milestone if this is an approval
             if patch.is_checked:
-                check_position = next(
-                    (i + 1 for i, c in enumerate(all_checks) if c.check_id == check.check_id),
-                    None
-                )
                 log_approved_check(
                     check_id=str(check.check_id),
                     check_type=str(check.type),
-                    check_position=check_position
+                    check_position=_get_check_position(check.check_id)
                 )
 
     check.updated_at = datetime.now(timezone.utc).replace(microsecond=0)

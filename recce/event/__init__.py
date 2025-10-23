@@ -7,7 +7,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from hashlib import sha256
-from typing import Dict
+from typing import Dict, Optional
 
 import sentry_sdk
 
@@ -314,6 +314,17 @@ def get_system_timezone():
 def _hash_id(value):
     """Hash an ID for privacy. Handles strings, UUIDs, and other types."""
     return sha256(str(value).encode()).hexdigest()
+
+
+def _get_check_position(check_id) -> Optional[int]:
+    """Get 1-based position of check in the check list, or None if not found"""
+    from recce.models import CheckDAO
+    all_checks = CheckDAO().list()
+    position = next(
+        (i + 1 for i, c in enumerate(all_checks) if str(c.check_id) == str(check_id)),
+        None
+    )
+    return position
 
 
 def _calculate_pr_age(pr):
