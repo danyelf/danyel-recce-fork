@@ -416,18 +416,6 @@ def log_environment_snapshot():
     _collector.schedule_flush()
 
 
-
-
-def log_viewed_checks():
-    """Log when user views the checks panel"""
-    log_event({}, "[User] viewed_checks")
-
-
-def log_viewed_query():
-    """Log when user views the query builder"""
-    log_event({}, "[User] viewed_query")
-
-
 def log_ran_check(check_id: str = None, check_type: str = None, check_position: int = None):
     """Log when user executes a check"""
     prop = {
