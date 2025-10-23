@@ -327,22 +327,17 @@ def _calculate_pr_age(pr):
 
 
 def _add_pr_info(prop, context):
-    """Add PR information to properties"""
+    """Add PR information to properties (flattened structure)"""
     state = context.export_state()
     if not state or not state.pull_request:
-        prop["has_pr"] = False
-        return
+        return  # No PR data to add
 
-    prop["has_pr"] = True
     pr = state.pull_request
-    pr_info = {}
 
     if pr.id:
-        pr_info["number"] = sha256(str(pr.id).encode()).hexdigest()
-    pr_info["state"] = getattr(pr, "state", None)
-    pr_info["age_hours"] = _calculate_pr_age(pr)
-
-    prop["pr_info"] = pr_info
+        prop["pr_number_hash"] = sha256(str(pr.id).encode()).hexdigest()
+    prop["pr_state"] = getattr(pr, "state", None)
+    prop["pr_age_hours"] = _calculate_pr_age(pr)
 
 
 def _get_catalog_age(catalog):
@@ -358,7 +353,6 @@ def _get_catalog_age(catalog):
 def _set_non_dbt_defaults(prop):
     """Set default values for non-dbt adapters"""
     prop["warehouse_type"] = None
-    prop["has_database"] = False
     prop["has_base_env"] = False
     prop["has_current_env"] = False
     prop["catalog_age_hours_base"] = None
@@ -373,7 +367,6 @@ def _add_dbt_info(prop, context):
 
         # Warehouse type
         prop["warehouse_type"] = dbt_adapter.adapter.type()
-        prop["has_database"] = True
 
         # Base and current environment info
         prop["has_base_env"] = bool(dbt_adapter.base_manifest)
@@ -399,9 +392,8 @@ def log_environment_snapshot():
 
     prop = {}
 
-    # Cloud and file mode
-    prop["has_cloud"] = context.state_loader.cloud_mode if context.state_loader else False
-    prop["cloud_mode"] = "cloud" if prop["has_cloud"] else "local"
+    # Cloud mode
+    prop["cloud_mode"] = "cloud" if (context.state_loader and context.state_loader.cloud_mode) else "local"
 
     # PR information
     _add_pr_info(prop, context)
