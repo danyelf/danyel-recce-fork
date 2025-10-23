@@ -173,6 +173,10 @@ def log_event(prop, event_type, **kwargs):
     if should_log_event() is False:
         return
 
+    # Debug logging for development/testing
+    if os.getenv("RECCE_DEBUG_EVENTS"):
+        print(f"[RECCE_DEBUG] Logging event: {event_type} {prop}")
+
     repo = hosting_repo()
     if repo is not None:
         prop["repository"] = sha256(repo.encode()).hexdigest()
@@ -224,7 +228,7 @@ def log_load_state(command="server", single_env=False):
     if command == "server":
         prop["single_env"] = single_env
 
-    log_event(prop, "load_state")
+    log_event(prop, "[User] load_state")
     if command == "server":
         _collector.schedule_flush()
 
@@ -302,3 +306,237 @@ def set_exception_tag(key, value):
 
 def get_system_timezone():
     return datetime.now(timezone.utc).astimezone().tzinfo
+
+
+def log_environment_snapshot():
+    """Log environment configuration at server startup"""
+    from recce.core import default_context
+
+    try:
+        context = default_context()
+    except Exception:
+        # Context not ready yet
+        return
+
+    prop = {}
+
+    # Cloud and file mode
+    prop["has_cloud"] = context.state_loader.cloud_mode if context.state_loader else False
+    prop["cloud_mode"] = "cloud" if prop["has_cloud"] else "local"
+
+    # PR information - collapsed into pr_info object
+    state = context.export_state() if context else None
+    pr_info = {}
+    if state and state.pull_request:
+        prop["has_pr"] = True
+        pr = state.pull_request
+        # Hash PR number for privacy
+        if pr.id:
+            pr_info["number"] = sha256(str(pr.id).encode()).hexdigest()
+        pr_info["state"] = getattr(pr, "state", None)
+
+        # Calculate PR age if created_at available
+        if hasattr(pr, "created_at") and pr.created_at:
+            try:
+                from dateutil import parser
+
+                pr_created = parser.parse(pr.created_at)
+                now = datetime.now(timezone.utc)
+                pr_info["age_hours"] = (now - pr_created).total_seconds() / 3600
+            except Exception:
+                pr_info["age_hours"] = None
+        else:
+            pr_info["age_hours"] = None
+    else:
+        prop["has_pr"] = False
+        pr_info = None
+
+    if pr_info:
+        prop["pr_info"] = pr_info
+
+    # Adapter information
+    prop["adapter_type"] = context.adapter_type
+
+    # Database/warehouse type
+    if context.adapter_type == "dbt":
+        try:
+            from recce.adapter.dbt_adapter import DbtAdapter
+
+            dbt_adapter: DbtAdapter = context.adapter
+            prop["warehouse_type"] = dbt_adapter.adapter.type()
+            prop["has_database"] = True  # If adapter initialized, assume DB configured
+        except Exception:
+            prop["warehouse_type"] = None
+            prop["has_database"] = False
+    else:
+        prop["warehouse_type"] = None
+        prop["has_database"] = False
+
+    # Catalog ages (collapsed from manifest and catalog - they're created together in dbt)
+    if context.adapter_type == "dbt":
+        try:
+            from recce.adapter.dbt_adapter import DbtAdapter
+
+            dbt_adapter: DbtAdapter = context.adapter
+
+            # Base environment
+            if dbt_adapter.base_manifest:
+                prop["has_base_env"] = True
+                if (
+                    dbt_adapter.base_catalog
+                    and dbt_adapter.base_catalog.metadata
+                    and dbt_adapter.base_catalog.metadata.generated_at
+                ):
+                    gen_at = dbt_adapter.base_catalog.metadata.generated_at
+                    now = datetime.now(timezone.utc)
+                    prop["catalog_age_hours_base"] = (now - gen_at).total_seconds() / 3600
+                else:
+                    prop["catalog_age_hours_base"] = None
+            else:
+                prop["has_base_env"] = False
+                prop["catalog_age_hours_base"] = None
+
+            # Current environment
+            if dbt_adapter.curr_manifest:
+                prop["has_current_env"] = True
+                if (
+                    dbt_adapter.curr_catalog
+                    and dbt_adapter.curr_catalog.metadata
+                    and dbt_adapter.curr_catalog.metadata.generated_at
+                ):
+                    gen_at = dbt_adapter.curr_catalog.metadata.generated_at
+                    now = datetime.now(timezone.utc)
+                    prop["catalog_age_hours_current"] = (now - gen_at).total_seconds() / 3600
+                else:
+                    prop["catalog_age_hours_current"] = None
+            else:
+                prop["has_current_env"] = False
+                prop["catalog_age_hours_current"] = None
+        except Exception:
+            prop["has_base_env"] = False
+            prop["has_current_env"] = False
+            prop["catalog_age_hours_base"] = None
+            prop["catalog_age_hours_current"] = None
+    else:
+        prop["has_base_env"] = False
+        prop["has_current_env"] = False
+        prop["catalog_age_hours_base"] = None
+        prop["catalog_age_hours_current"] = None
+
+    log_event(prop, "[User] environment_snapshot")
+    _collector.schedule_flush()
+
+
+
+
+def log_viewed_checks():
+    """Log when user views the checks panel"""
+    log_event({}, "[User] viewed_checks")
+
+
+def log_viewed_query():
+    """Log when user views the query builder"""
+    log_event({}, "[User] viewed_query")
+
+
+def log_ran_check(check_id: str = None, check_type: str = None, check_position: int = None):
+    """Log when user executes a check"""
+    prop = {}
+    if check_id is not None:
+        prop["check_id"] = check_id
+    if check_type is not None:
+        prop["check_type"] = check_type
+    if check_position is not None:
+        prop["check_position"] = check_position
+    log_event(prop, "[User] ran_check")
+
+
+def log_approved_check(check_id: str = None, check_type: str = None, check_position: int = None):
+    """Log when user approves a check result"""
+    prop = {}
+    if check_id is not None:
+        prop["check_id"] = check_id
+    if check_type is not None:
+        prop["check_type"] = check_type
+    if check_position is not None:
+        prop["check_position"] = check_position
+    log_event(prop, "[User] approved_check")
+
+
+def log_created_check(check_id: str = None, check_type: str = None, check_position: int = None):
+    """Log when user creates a check"""
+    prop = {}
+    if check_id is not None:
+        prop["check_id"] = check_id
+    if check_type is not None:
+        prop["check_type"] = check_type
+    if check_position is not None:
+        prop["check_position"] = check_position
+    log_event(prop, "[User] created_check")
+
+
+def log_run_completed(run_id: str, run_type: str, status: str, duration_seconds: float, error: str = None, result=None, check_id: str = None, check_position: int = None):
+    """Log run completion with outcome"""
+    prop = {
+        "run_id": sha256(str(run_id).encode()).hexdigest(),
+        "run_type": run_type,
+        "status": status,  # 'success', 'error', 'cancelled'
+        "duration_seconds": duration_seconds,
+    }
+
+    # Add check lifecycle information if available
+    if check_id is not None:
+        prop["check_id"] = check_id
+    if check_position is not None:
+        prop["check_position"] = check_position
+
+    # Add error information
+    if error:
+        # Categorize error type
+        error_lower = error.lower()
+        if "connection" in error_lower or "connect" in error_lower:
+            prop["error_type"] = "connection"
+        elif "timeout" in error_lower:
+            prop["error_type"] = "timeout"
+        elif "query" in error_lower or "sql" in error_lower:
+            prop["error_type"] = "query_error"
+        elif "validation" in error_lower:
+            prop["error_type"] = "validation_error"
+        else:
+            prop["error_type"] = "other"
+
+        # Truncate error message (no sensitive data)
+        prop["error_message"] = str(error)[:200]
+    else:
+        prop["error_type"] = None
+        prop["error_message"] = None
+
+    # Add result size/differences if available
+    if result and isinstance(result, dict):
+        if "data" in result and isinstance(result["data"], list):
+            prop["result_size"] = len(result["data"])
+
+        # Check for differences in diff operations
+        if "diff" in result:
+            prop["has_differences"] = bool(result["diff"])
+        elif "data" in result and isinstance(result["data"], dict):
+            # For some diff types, data itself might indicate differences
+            prop["has_differences"] = len(result["data"]) > 0
+    else:
+        prop["result_size"] = None
+        prop["has_differences"] = None
+
+    log_event(prop, "[User] run_completed")
+    _collector.schedule_flush()
+
+
+def log_model_lineage_changes(total_nodes: int, model_nodes: int, source_nodes: int, change_status: Dict):
+    """Log model lineage changes detected"""
+    prop = {
+        "total_nodes": total_nodes,
+        "model_nodes": model_nodes,
+        "source_nodes": source_nodes,
+        "change_status": change_status,
+    }
+    log_event(prop, "[User] model_lineage")
+    _collector.schedule_flush()
