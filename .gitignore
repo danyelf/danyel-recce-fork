@@ -18,5 +18,4 @@ build
 recce.yml
 
 # Claude Code user-local configuration
-.claude/*
-!.claude/agents/
+.claude/settings.local.json
