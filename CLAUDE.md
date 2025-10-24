@@ -1,40 +1,19 @@
 # Recce Development Guide
 
+This document contains Recce-specific development practices and architecture reference.
+
 ## Personal Workspace Configuration
 
-For personal workflow preferences and notes, configure your workspace location in `~/.claude/claude.md`.
+If `~/.claude/claude.md` exists, read it to find the personal workspace location for this project. The workspace contains:
+- `working-with-you.md` - User's personal workflow preferences
+- `journal.md` - Working notes and insights
+- `sessions/` - Session summaries
+- `plans/` - Planning documents
+- `docs/` - Reference documentation
 
-### Setting Up Your Personal Workspace
+If `~/.claude/claude.md` doesn't exist, proceed without personal preferences.
 
-Create `~/.claude/claude.md` with your workspace location:
-
-```markdown
-# Claude Workspace Configuration
-
-### recce (or project name)
-
-Personal workspace: `~/your-notes-repo/recce/`
-
-Expected structure:
-
-- working-with-you.md - Personal workflow preferences
-- journal.md - Working notes and insights
-- sessions/ - Session summaries
-- plans/ - Planning documents
-- docs/ - Reference documentation
-```
-
-Then create that directory structure and populate `working-with-you.md` with your preferences.
-
-Custom agents should stay in `.claude/agents/` so they can be shared with the team.
-
----
-
-# Recce Development Guide
-
-This document contains Recce-specific development instructions and architectural reference.
-
-For general workflow and personal preferences, see `~/.claude/claude.md`.
+Custom agents are located in `.claude/agents/` and are shared across the team.
 
 ## Recce-Specific Development Practices
 
