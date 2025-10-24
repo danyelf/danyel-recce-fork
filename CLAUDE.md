@@ -346,6 +346,12 @@ When you modify frontend code and want to test it with the Python backend:
 
 ---
 
+<<<<<<< HEAD
+
 ## Individual Preferences
 
-- @~/.claude/recce.md
+- # @~/.claude/recce.md
+  **Last Updated**: October 2024
+  **Main Branch**: `main`
+  **Current Version**: Check `recce/VERSION` file
+  > > > > > > > 19b1de94 (Configure Claude workspace isolation)
