@@ -16,3 +16,6 @@ build
 .DS_Store
 
 recce.yml
+
+# Claude Code user-local configuration
+.claude/settings.local.json
