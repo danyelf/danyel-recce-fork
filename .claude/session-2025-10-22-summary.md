@@ -148,3 +148,127 @@ node test-frontend-tracking.js
 **Session Date**: October 22, 2025
 **Branch**: `danyel.amplitude-user-actions`
 **Status**: Ready to commit - all tests passing, code cleaned up
+
+---
+
+# PR Branch Creation Process (October 23, 2025)
+
+## Overview
+After addressing all code quality issues from the instrumentation critique, we created a clean PR branch without development artifacts (.claude/, CLAUDE.md, bin/, test files).
+
+## Process Steps
+
+### 1. Sync Working Branch to Server
+```bash
+# Force push working branch with full commit history
+git push -f origin danyel.amplitude-user-actions
+```
+
+### 2. Create Clean PR Branch
+
+```bash
+# Start from latest main
+git checkout main
+git pull upstream main
+git push origin main
+
+# Create new branch from main
+git checkout -b amplitude-instrumentation-clean-v2 origin/main
+
+# Squash merge all changes from working branch (but don't commit yet)
+git merge --squash danyel.amplitude-user-actions
+
+# At this point, all changes are staged but not committed
+# Next step: remove unwanted files
+```
+
+### 3. Remove Development Artifacts
+
+```bash
+# Unstage files we don't want in the PR
+git reset HEAD .claude/
+git reset HEAD CLAUDE.md
+git reset HEAD bin/restart-server.sh
+git reset HEAD .session-2025-10-22.md
+git reset HEAD js/test-frontend-tracking.js
+git reset HEAD js/package.json js/package-lock.json  # These only added playwright for tests
+git reset HEAD test_scripts/
+
+# Remove unwanted files from working directory
+rm -rf .claude/ CLAUDE.md bin/ .session-2025-10-22.md js/test-frontend-tracking.js test_scripts/
+
+# If package.json/package-lock.json have unwanted changes (e.g., playwright), restore from main
+git checkout origin/main -- js/package.json js/package-lock.json
+```
+
+### 4. Verify Clean State
+
+```bash
+# Check what's staged
+git status
+
+# Should show only production code files:
+# - js/app/page.tsx
+# - js/src/lib/api/track.ts
+# - recce/adapter/dbt_adapter/__init__.py
+# - recce/apis/check_api.py
+# - recce/apis/run_api.py
+# - recce/apis/run_func.py
+# - recce/event/__init__.py
+# - recce/server.py
+# - recce/util/perf_tracking.py
+
+# Verify file list matches expectations
+git diff --name-only origin/main..HEAD
+```
+
+### 5. Commit and Push
+
+```bash
+# Commit with descriptive message
+git commit -m "Add comprehensive Amplitude analytics instrumentation
+
+This adds user action tracking throughout the Recce application to understand
+how teams use Recce for dbt change validation workflows.
+
+Backend Changes:
+- Add milestone event tracking (ran_check, approved_check, created_check)
+- Add run_completed event with duration, status, and result metrics
+- Add environment_snapshot event capturing PR context and warehouse config
+- Add model_lineage event tracking graph size and change analysis
+- Refactor event/__init__.py with focused helper functions for maintainability
+- Add check position tracking across check lifecycle events
+
+Frontend Changes:
+- Instrument page.tsx with check approval tracking
+- Add track.ts utility with trackEvent() for frontend analytics
+- Send frontend events to /api/track endpoint
+
+Code Quality Improvements:
+- Extract helper functions (_hash_id, _get_check_position, _calculate_pr_age, etc.)
+- Replace bare exception handlers with specific exceptions and logging
+- Remove dead code (log_viewed_checks, log_viewed_query)
+- Standardize ID hashing using SHA256 for privacy
+- Simplify event property handling (remove defensive None checks)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+
+# Push to origin
+git push -u origin amplitude-instrumentation-clean-v2
+```
+
+## Final Result
+
+- **Working Branch**: `danyel.amplitude-user-actions` (preserved with full history)
+- **Clean PR Branch**: `amplitude-instrumentation-clean-v2` (single commit, production code only)
+- **Files Changed**: 9 files, +429 lines, -11 lines
+- **Excluded**: .claude/, CLAUDE.md, bin/, test files, package.json/lock changes
+
+## Key Lessons
+
+1. **Always verify package.json changes** - Dependencies added for testing (like playwright) shouldn't be in production PRs
+2. **Use git reset HEAD to unstage** - Don't use `git checkout --` for files that don't exist on the base branch
+3. **Empty directories remain after rm** - Use `rmdir` to remove empty directories left by `rm -rf`
+4. **Squash merge + selective staging** - Allows cherry-picking production code while excluding development artifacts
